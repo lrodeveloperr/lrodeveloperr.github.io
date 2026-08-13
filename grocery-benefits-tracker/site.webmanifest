@@ -1,0 +1,19 @@
+{
+  "name": "Grocery Benefits Tracker — Legal & Support",
+  "short_name": "Benefits Tracker",
+  "description": "Legal, privacy, support, and official-source information for Grocery Benefits Tracker.",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f5f7fb",
+  "theme_color": "#f5f7fb",
+  "icons": [
+    {
+      "src": "assets/brand-logo.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
