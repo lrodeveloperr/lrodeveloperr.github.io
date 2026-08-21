@@ -100,6 +100,13 @@ jobs:
           godot --headless --path ci/cascade-dispatch --import --quit 2>&1 | tee /tmp/godot-import.log
           ! grep -E 'SCRIPT ERROR:|Parse Error:|Compile Error:|Failed to load script' /tmp/godot-import.log
 
+      - name: Launch main scene smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path ci/cascade-dispatch --quit-after 120 2>&1 | tee /tmp/godot-runtime.log
+          ! grep -E 'SCRIPT ERROR:|Parse Error:|Compile Error:|Invalid call|Invalid get index|Failed to load|ERROR:' /tmp/godot-runtime.log
+
       - name: Export debug APK
         shell: bash
         run: |
