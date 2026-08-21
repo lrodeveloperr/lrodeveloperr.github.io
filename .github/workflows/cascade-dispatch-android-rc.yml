@@ -105,7 +105,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p ci/cascade-dispatch/build/android
-          godot --headless --path ci/cascade-dispatch --export-debug "Android Debug" ci/cascade-dispatch/build/android/Cascade-Dispatch-debug.apk 2>&1 | tee /tmp/godot-export.log
+          godot --headless --path ci/cascade-dispatch --export-debug "Android Debug" build/android/Cascade-Dispatch-debug.apk 2>&1 | tee /tmp/godot-export.log
           ! grep -E 'SCRIPT ERROR:|Parse Error:|Compile Error:|Project export.*failed|ERROR: Cannot export' /tmp/godot-export.log
           test -s ci/cascade-dispatch/build/android/Cascade-Dispatch-debug.apk
           sha256sum ci/cascade-dispatch/build/android/Cascade-Dispatch-debug.apk > ci/cascade-dispatch/build/android/Cascade-Dispatch-debug.apk.sha256
