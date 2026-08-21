@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Reconstruct exact RC source
+      - name: Reconstruct exact RC source and apply 4.7.2 export fixes
         shell: bash
         run: |
           set -euo pipefail
@@ -31,7 +31,26 @@ jobs:
           test -f ci/cascade-dispatch/project.godot
           test -f ci/cascade-dispatch/src/main.gd
 
-      - uses: actions/setup-java@v4
+          # Godot 4.7.2 treats Object.tr as a built-in; avoid the external-class collision.
+          sed -i 's/static func tr(locale: String, key: String) -> String:/static func text(locale: String, key: String) -> String:/' ci/cascade-dispatch/src/locale_catalog.gd
+          sed -i 's/LocaleCatalog\.tr(/LocaleCatalog.text(/g' ci/cascade-dispatch/src/main.gd
+
+          # Non-Gradle debug exports cannot override Min SDK.
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('ci/cascade-dispatch/export_presets.cfg')
+          s = p.read_text()
+          head, sep, tail = s.partition('[preset.1]')
+          head = head.replace('gradle_build/min_sdk="23"\n', '')
+          p.write_text(head + (sep + tail if sep else ''))
+          PY
+
+          # Android export requires ETC2/ASTC import support.
+          if ! grep -q '^textures/vram_compression/import_etc2_astc=true$' ci/cascade-dispatch/project.godot; then
+            sed -i '/^environment\/defaults\/default_clear_color=/a textures/vram_compression/import_etc2_astc=true' ci/cascade-dispatch/project.godot
+          fi
+
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -69,15 +88,20 @@ jobs:
           export/android/debug_keystore_pass = "android"
           EOF
 
-      - name: Import project
-        run: godot --headless --path ci/cascade-dispatch --import --quit
+      - name: Import project and fail on script errors
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path ci/cascade-dispatch --import --quit 2>&1 | tee /tmp/godot-import.log
+          ! grep -E 'SCRIPT ERROR:|Parse Error:|Failed to load script' /tmp/godot-import.log
 
       - name: Export debug APK
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p ci/cascade-dispatch/build/android
-          godot --headless --path ci/cascade-dispatch --export-debug "Android Debug" ci/cascade-dispatch/build/android/Cascade-Dispatch-debug.apk
+          godot --headless --path ci/cascade-dispatch --export-debug "Android Debug" ci/cascade-dispatch/build/android/Cascade-Dispatch-debug.apk 2>&1 | tee /tmp/godot-export.log
+          ! grep -E 'SCRIPT ERROR:|Parse Error:|Project export.*failed|ERROR: Cannot export' /tmp/godot-export.log
           test -s ci/cascade-dispatch/build/android/Cascade-Dispatch-debug.apk
           sha256sum ci/cascade-dispatch/build/android/Cascade-Dispatch-debug.apk > ci/cascade-dispatch/build/android/Cascade-Dispatch-debug.apk.sha256
 
