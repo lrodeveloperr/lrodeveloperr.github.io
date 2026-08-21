@@ -16,6 +16,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Reconstruct exact RC source
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat ci/cascade-dispatch-src.b64.00 ci/cascade-dispatch-src.b64.01 ci/cascade-dispatch-src.b64.02 ci/cascade-dispatch-src.b64.03 ci/cascade-dispatch-src.b64.04 | base64 -d > /tmp/cascade-dispatch-src.zip
+          echo "49a2031f8518d791cfc3b052a37b75a0ead6ad0a54495281e1881cc0fa2df57c  /tmp/cascade-dispatch-src.zip" | sha256sum -c -
+          rm -rf ci/cascade-dispatch
+          mkdir -p ci/cascade-dispatch
+          unzip -q /tmp/cascade-dispatch-src.zip -d ci/cascade-dispatch
+          test -f ci/cascade-dispatch/project.godot
+          test -f ci/cascade-dispatch/src/main.gd
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
