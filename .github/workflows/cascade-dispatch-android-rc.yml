@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - cascade-dispatch-rc1-build-20260821
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
