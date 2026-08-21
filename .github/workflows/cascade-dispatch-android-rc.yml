@@ -35,6 +35,11 @@ jobs:
           sed -i 's/static func tr(locale: String, key: String) -> String:/static func text(locale: String, key: String) -> String:/' ci/cascade-dispatch/src/locale_catalog.gd
           sed -i 's/LocaleCatalog\.tr(/LocaleCatalog.text(/g' ci/cascade-dispatch/src/main.gd
 
+          # Godot Node owns the ready member/signal name; use an explicit ad-state name.
+          sed -i 's/var ready := false/var ads_ready := false/' ci/cascade-dispatch/src/ad_service.gd
+          sed -i 's/    ready = true/    ads_ready = true/' ci/cascade-dispatch/src/ad_service.gd
+          sed -i 's/if not ready:/if not ads_ready:/' ci/cascade-dispatch/src/ad_service.gd
+
           # Non-Gradle debug exports cannot override Min SDK.
           python - <<'PY'
           from pathlib import Path
@@ -93,7 +98,7 @@ jobs:
         run: |
           set -euo pipefail
           godot --headless --path ci/cascade-dispatch --import --quit 2>&1 | tee /tmp/godot-import.log
-          ! grep -E 'SCRIPT ERROR:|Parse Error:|Failed to load script' /tmp/godot-import.log
+          ! grep -E 'SCRIPT ERROR:|Parse Error:|Compile Error:|Failed to load script' /tmp/godot-import.log
 
       - name: Export debug APK
         shell: bash
@@ -101,7 +106,7 @@ jobs:
           set -euo pipefail
           mkdir -p ci/cascade-dispatch/build/android
           godot --headless --path ci/cascade-dispatch --export-debug "Android Debug" ci/cascade-dispatch/build/android/Cascade-Dispatch-debug.apk 2>&1 | tee /tmp/godot-export.log
-          ! grep -E 'SCRIPT ERROR:|Parse Error:|Project export.*failed|ERROR: Cannot export' /tmp/godot-export.log
+          ! grep -E 'SCRIPT ERROR:|Parse Error:|Compile Error:|Project export.*failed|ERROR: Cannot export' /tmp/godot-export.log
           test -s ci/cascade-dispatch/build/android/Cascade-Dispatch-debug.apk
           sha256sum ci/cascade-dispatch/build/android/Cascade-Dispatch-debug.apk > ci/cascade-dispatch/build/android/Cascade-Dispatch-debug.apk.sha256
 
