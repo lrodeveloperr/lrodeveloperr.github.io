@@ -1,0 +1,76 @@
+name: Cascade Dispatch Android RC
+
+on:
+  push:
+    branches:
+      - cascade-dispatch-rc1-build-20260821
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-debug-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Godot 4.7.2 and export templates
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 -o /tmp/godot.zip "https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip"
+          unzip -q /tmp/godot.zip -d /tmp/godot
+          sudo install -m 0755 /tmp/godot/Godot_v4.7.2-stable_linux.x86_64 /usr/local/bin/godot
+          curl -fL --retry 3 -o /tmp/templates.tpz "https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_export_templates.tpz"
+          rm -rf /tmp/godot-templates
+          mkdir -p /tmp/godot-templates "$HOME/.local/share/godot/export_templates/4.7.2.stable"
+          unzip -q /tmp/templates.tpz -d /tmp/godot-templates
+          cp -a /tmp/godot-templates/templates/. "$HOME/.local/share/godot/export_templates/4.7.2.stable/"
+          godot --version
+
+      - name: Configure Android debug signing
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.android" "$HOME/.config/godot"
+          if [ ! -f "$HOME/.android/debug.keystore" ]; then
+            keytool -genkeypair -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          fi
+          cat > "$HOME/.config/godot/editor_settings-4.tres" <<EOF
+          [gd_resource type="EditorSettings" format=3]
+
+          [resource]
+          export/android/android_sdk_path = "$ANDROID_HOME"
+          export/android/java_sdk_path = "$JAVA_HOME"
+          export/android/debug_keystore = "$HOME/.android/debug.keystore"
+          export/android/debug_keystore_user = "androiddebugkey"
+          export/android/debug_keystore_pass = "android"
+          EOF
+
+      - name: Import project
+        run: godot --headless --path ci/cascade-dispatch --import --quit
+
+      - name: Export debug APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ci/cascade-dispatch/build/android
+          godot --headless --path ci/cascade-dispatch --export-debug "Android Debug" ci/cascade-dispatch/build/android/Cascade-Dispatch-debug.apk
+          test -s ci/cascade-dispatch/build/android/Cascade-Dispatch-debug.apk
+          sha256sum ci/cascade-dispatch/build/android/Cascade-Dispatch-debug.apk > ci/cascade-dispatch/build/android/Cascade-Dispatch-debug.apk.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Cascade-Dispatch-Android-RC1-debug
+          path: |
+            ci/cascade-dispatch/build/android/Cascade-Dispatch-debug.apk
+            ci/cascade-dispatch/build/android/Cascade-Dispatch-debug.apk.sha256
+          if-no-files-found: error
+          retention-days: 14
