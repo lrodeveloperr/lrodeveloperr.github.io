@@ -1,0 +1,49 @@
+; Cascade Dispatch mobile release candidate
+; Godot 4.7.x
+config_version=5
+
+[application]
+config/name="Cascade Dispatch"
+config/description="Spot the fault. Stop the cascade."
+run/main_scene="res://scenes/main.tscn"
+config/features=PackedStringArray("4.7", "GL Compatibility")
+config/icon="res://icon.svg"
+
+[display]
+window/size/viewport_width=780
+window/size/viewport_height=1380
+window/size/window_width_override=390
+window/size/window_height_override=690
+window/stretch/mode="canvas_items"
+window/handheld/orientation=1
+window/energy_saving/keep_screen_on=true
+
+[rendering]
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+environment/defaults/default_clear_color=Color(0.9333, 0.9569, 0.9608, 1)
+
+[gui]
+theme/default_font_multichannel_signed_distance_field=true
+
+[audio]
+driver/enable_input=false
+
+[internationalization]
+locale/include_text_server_data=true
+locale/test=""
+
+[physics]
+common/enable_pause_aware_picking=true
+
+[cascade]
+ads/android_banner_id=""
+ads/ios_banner_id=""
+release/channel="rc1"
+
+[admob]
+; Debug CI intentionally has no native ad plugin. These are Google's sample app IDs only.
+general/android/enabled=true
+general/android/app_id="ca-app-pub-3940256099942544~3347511713"
+general/ios/enabled=true
+general/ios/app_id="ca-app-pub-3940256099942544~1458002511"

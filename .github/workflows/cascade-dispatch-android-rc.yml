@@ -1,0 +1,127 @@
+name: Cascade Dispatch Android RC
+
+on:
+  push:
+    branches:
+      - cascade-dispatch-rc1-build-20260821
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-debug-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reconstruct exact RC source and apply 4.7.2 export fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat ci/cascade-dispatch-src.b64.00 ci/cascade-dispatch-src.b64.01 ci/cascade-dispatch-src.b64.02 ci/cascade-dispatch-src.b64.03 ci/cascade-dispatch-src.b64.04 | base64 -d > /tmp/cascade-dispatch-src.zip
+          echo "49a2031f8518d791cfc3b052a37b75a0ead6ad0a54495281e1881cc0fa2df57c  /tmp/cascade-dispatch-src.zip" | sha256sum -c -
+          rm -rf ci/cascade-dispatch
+          mkdir -p ci/cascade-dispatch
+          unzip -q /tmp/cascade-dispatch-src.zip -d ci/cascade-dispatch
+          test -f ci/cascade-dispatch/project.godot
+          test -f ci/cascade-dispatch/src/main.gd
+
+          # Godot 4.7.2 treats Object.tr as a built-in; avoid the external-class collision.
+          sed -i 's/static func tr(locale: String, key: String) -> String:/static func text(locale: String, key: String) -> String:/' ci/cascade-dispatch/src/locale_catalog.gd
+          sed -i 's/LocaleCatalog\.tr(/LocaleCatalog.text(/g' ci/cascade-dispatch/src/main.gd
+
+          # Godot Node owns the ready member/signal name; use an explicit ad-state name.
+          sed -i 's/var ready := false/var ads_ready := false/' ci/cascade-dispatch/src/ad_service.gd
+          sed -i 's/    ready = true/    ads_ready = true/' ci/cascade-dispatch/src/ad_service.gd
+          sed -i 's/if not ready:/if not ads_ready:/' ci/cascade-dispatch/src/ad_service.gd
+
+          # Non-Gradle debug exports cannot override Min SDK.
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('ci/cascade-dispatch/export_presets.cfg')
+          s = p.read_text()
+          head, sep, tail = s.partition('[preset.1]')
+          head = head.replace('gradle_build/min_sdk="23"\n', '')
+          p.write_text(head + (sep + tail if sep else ''))
+          PY
+
+          # Android export requires ETC2/ASTC import support.
+          if ! grep -q '^textures/vram_compression/import_etc2_astc=true$' ci/cascade-dispatch/project.godot; then
+            sed -i '/^environment\/defaults\/default_clear_color=/a textures/vram_compression/import_etc2_astc=true' ci/cascade-dispatch/project.godot
+          fi
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Godot 4.7.2 and export templates
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 -o /tmp/godot.zip "https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip"
+          unzip -q /tmp/godot.zip -d /tmp/godot
+          sudo install -m 0755 /tmp/godot/Godot_v4.7.2-stable_linux.x86_64 /usr/local/bin/godot
+          curl -fL --retry 3 -o /tmp/templates.tpz "https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_export_templates.tpz"
+          rm -rf /tmp/godot-templates
+          mkdir -p /tmp/godot-templates "$HOME/.local/share/godot/export_templates/4.7.2.stable"
+          unzip -q /tmp/templates.tpz -d /tmp/godot-templates
+          cp -a /tmp/godot-templates/templates/. "$HOME/.local/share/godot/export_templates/4.7.2.stable/"
+          godot --version
+
+      - name: Configure Android debug signing
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.android" "$HOME/.config/godot"
+          if [ ! -f "$HOME/.android/debug.keystore" ]; then
+            keytool -genkeypair -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          fi
+          cat > "$HOME/.config/godot/editor_settings-4.tres" <<EOF
+          [gd_resource type="EditorSettings" format=3]
+
+          [resource]
+          export/android/android_sdk_path = "$ANDROID_HOME"
+          export/android/java_sdk_path = "$JAVA_HOME"
+          export/android/debug_keystore = "$HOME/.android/debug.keystore"
+          export/android/debug_keystore_user = "androiddebugkey"
+          export/android/debug_keystore_pass = "android"
+          EOF
+
+      - name: Import project and fail on script errors
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path ci/cascade-dispatch --import --quit 2>&1 | tee /tmp/godot-import.log
+          ! grep -E 'SCRIPT ERROR:|Parse Error:|Compile Error:|Failed to load script' /tmp/godot-import.log
+
+      - name: Launch main scene smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path ci/cascade-dispatch --quit-after 120 2>&1 | tee /tmp/godot-runtime.log
+          ! grep -E 'SCRIPT ERROR:|Parse Error:|Compile Error:|Invalid call|Invalid get index|Failed to load|ERROR:' /tmp/godot-runtime.log
+
+      - name: Export debug APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ci/cascade-dispatch/build/android
+          godot --headless --path ci/cascade-dispatch --export-debug "Android Debug" build/android/Cascade-Dispatch-debug.apk 2>&1 | tee /tmp/godot-export.log
+          ! grep -E 'SCRIPT ERROR:|Parse Error:|Compile Error:|Project export.*failed|ERROR: Cannot export' /tmp/godot-export.log
+          test -s ci/cascade-dispatch/build/android/Cascade-Dispatch-debug.apk
+          sha256sum ci/cascade-dispatch/build/android/Cascade-Dispatch-debug.apk > ci/cascade-dispatch/build/android/Cascade-Dispatch-debug.apk.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Cascade-Dispatch-Android-RC1-debug
+          path: |
+            ci/cascade-dispatch/build/android/Cascade-Dispatch-debug.apk
+            ci/cascade-dispatch/build/android/Cascade-Dispatch-debug.apk.sha256
+          if-no-files-found: error
+          retention-days: 14
