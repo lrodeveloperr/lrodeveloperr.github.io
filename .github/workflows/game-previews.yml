@@ -1,0 +1,84 @@
+name: Publish game evaluation previews
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/game-previews.yml"
+  workflow_dispatch:
+
+# Only the public evaluation site is deployed. The production game repositories
+# and their advertisement integrations are not modified.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out existing GitHub Pages website
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Create website staging directory without modifying existing pages
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/partner-site"
+          rsync -a --exclude='.git/' --exclude='.github/' --exclude='README.md' ./ "$RUNNER_TEMP/partner-site/"
+          mkdir -p "$RUNNER_TEMP/partner-site/games/makeup" "$RUNNER_TEMP/partner-site/games/barber"
+          touch "$RUNNER_TEMP/partner-site/.nojekyll"
+          # Keep the advertising-authorization file and existing support pages in place.
+          test -s "$RUNNER_TEMP/partner-site/app-ads.txt"
+
+      - name: Build playable Makeup Artist preview (local saves, no real ads)
+        run: |
+          set -euo pipefail
+          git clone --depth 1 https://github.com/lrodeveloperr/Makeup-artist-.git "$RUNNER_TEMP/makeup-source"
+          cd "$RUNNER_TEMP/makeup-source"
+          npm ci --no-audit --no-fund
+          npm run build:game
+          cp -a build/game-dev/. "$RUNNER_TEMP/partner-site/games/makeup/"
+          test -s "$RUNNER_TEMP/partner-site/games/makeup/index.html"
+          test -s "$RUNNER_TEMP/partner-site/games/makeup/main.js"
+          test -s "$RUNNER_TEMP/partner-site/games/makeup/head-0.bin"
+
+      - name: Build playable Barber Simulator standalone preview (local saves, no real ads)
+        run: |
+          set -euo pipefail
+          git clone --depth 1 https://github.com/lrodeveloperr/Haircut.git "$RUNNER_TEMP/barber-source"
+          cd "$RUNNER_TEMP/barber-source"
+          bash source/build-youtube.sh
+          python3 source/youtube/sites-preview.py source/build-youtube "$RUNNER_TEMP/standalone-barber"
+          cp -a "$RUNNER_TEMP/standalone-barber/." "$RUNNER_TEMP/partner-site/games/barber/"
+          test -s "$RUNNER_TEMP/partner-site/games/barber/index.html"
+          test -s "$RUNNER_TEMP/partner-site/games/barber/runtime/local-preview-client.js"
+          ! grep -q 'https://www.youtube.com/game_api/v1' "$RUNNER_TEMP/partner-site/games/barber/index.html"
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload complete existing website plus both playable previews
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: ${{ runner.temp }}/partner-site
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
