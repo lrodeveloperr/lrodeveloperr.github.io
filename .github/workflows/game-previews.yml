@@ -5,9 +5,10 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/game-previews.yml"
+      - "games/**"
   workflow_dispatch:
 
-# Only the public evaluation site is deployed. The production game repositories
+# Only the public evaluation site is deployed. Production game repositories
 # and their advertisement integrations are not modified.
 permissions:
   contents: read
@@ -52,16 +53,12 @@ jobs:
           test -s "$RUNNER_TEMP/partner-site/games/makeup/main.js"
           test -s "$RUNNER_TEMP/partner-site/games/makeup/head-0.bin"
 
-      - name: Build playable Barber Simulator standalone preview (local saves, no real ads)
+      - name: Verify checked-in Barber Simulator hosted build
         run: |
           set -euo pipefail
-          git clone --depth 1 https://github.com/lrodeveloperr/Haircut.git "$RUNNER_TEMP/barber-source"
-          cd "$RUNNER_TEMP/barber-source"
-          bash source/build-youtube.sh
-          python3 source/youtube/sites-preview.py source/build-youtube "$RUNNER_TEMP/standalone-barber"
-          cp -a "$RUNNER_TEMP/standalone-barber/." "$RUNNER_TEMP/partner-site/games/barber/"
           test -s "$RUNNER_TEMP/partner-site/games/barber/index.html"
           test -s "$RUNNER_TEMP/partner-site/games/barber/runtime/local-preview-client.js"
+          test -s "$RUNNER_TEMP/partner-site/games/barber/version.json"
           ! grep -q 'https://www.youtube.com/game_api/v1' "$RUNNER_TEMP/partner-site/games/barber/index.html"
 
       - name: Configure GitHub Pages

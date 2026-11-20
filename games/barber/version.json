@@ -1,0 +1,10 @@
+{
+  "title": "Barber Simulator: ASMR Haircut",
+  "version": "1.0.27",
+  "target": "Huawei hosted web game",
+  "sourceArchive": "Barber-Simulator-YouTube-Playables-1.0.27-yt20.zip",
+  "sourceSha256": "6de5ef5219fb43e72f5532131fd68898c0f3f839bac925a01e8d47514fd10b80",
+  "hosting": "GitHub Pages",
+  "ads": "disabled",
+  "progress": "local browser storage with in-memory fallback"
+}
